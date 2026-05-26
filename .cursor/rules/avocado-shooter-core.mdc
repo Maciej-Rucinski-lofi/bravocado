@@ -5,13 +5,33 @@ alwaysApply: true
 
 # Pygame Avocado Shooter: Core Architecture
 
-- Use **world coordinates** (`pygame.math.Vector2`) for all entities: `player.pos`, `enemy.pos`, `bullet.pos`.
-- Keep the player **drawn at screen center**; move the world via a camera transform.
-- Camera follows player:
-  - `camera.pos = player.pos`
+## Project layout (current)
+
+- `main.py` — game loop, input, draw helpers, sprite load/blit
+- `game/settings.py` — window size, speeds, colors, sprite path/size
+- `game/camera.py` — `Camera` dataclass, `world_to_screen`, `screen_to_world`
+- `img/` — hero/enemy art (hero: `bravocado-points-one-hand-no-bg.PNG`, transparent PNG)
+- `docs/plans/bravocado.plan.md` — step-by-step roadmap
+
+## World vs screen (implemented)
+
+- Use **world coordinates** (`pygame.math.Vector2`) for simulation: today `player_pos`; later `player.pos`, `enemy.pos`, `bullet.pos`.
+- Player is **drawn at screen center** `(WINDOW_W/2, WINDOW_H/2)`; world scrolls via camera.
+- Camera follows player: `camera.pos = player_pos` (sync each frame after movement).
+- Transforms live in `game/camera.py`:
   - `world_to_screen(p) = p - camera.pos + (WINDOW_W/2, WINDOW_H/2)`
   - `screen_to_world(s) = s + camera.pos - (WINDOW_W/2, WINDOW_H/2)`
-- Use **dt-based motion** (`seconds`) everywhere: `pos += vel * dt`.
-- Use `pygame.time.get_ticks()` for **cadence** timers (auto-fire 500ms, contact damage cooldown).
-- Collisions: prefer **simple circle** checks for bullet/enemy and enemy/player.
-- Game states: `PLAYING`, `WIN`, `GAME_OVER`; restart should fully reset the run state.
+- World-space grid uses `world_to_screen`; player sprite does **not** (always centered).
+
+## Motion & timing
+
+- **dt-based motion** (seconds): `pos += vel * dt`; `dt = clock.tick(FPS_CAP) / 1000.0`.
+- Speeds in `game/settings.py` are **pixels per second** (e.g. `PLAYER_SPEED = 320`).
+- Use `pygame.time.get_ticks()` for cadence timers (auto-fire 500ms, contact damage cooldown) — not implemented yet.
+
+## Planned (not in codebase yet)
+
+- Lightweight entities in `game/entities.py` (dataclass or simple class).
+- Bullets, enemies, circle collisions, HP, `PLAYING` / `WIN` / `GAME_OVER` + full restart.
+
+When adding features, extend existing modules before growing `main.py`; keep constants in `game/settings.py`.

@@ -1,26 +1,43 @@
 ---
-description: Entity model, rendering expectations, and collisions (procedural avocado).
+description: Entity model, rendering, and collisions for the avocado shooter.
 globs: **/*.py
 alwaysApply: false
 ---
 
 # Entities, Rendering, Collisions
 
-- Entities should be lightweight (dataclass or simple class):
-  - `Player(pos, hp, radius, speed)`
-  - `Enemy(pos, radius, speed)`
-  - `Bullet(pos, vel, radius, ttl_ms or born_ms)`
-- Spawning:
-  - Spawn enemies **outside the visible screen** based on player/camera world position + window half-extents.
-- Rendering:
-  - Player is drawn at `(WINDOW_W/2, WINDOW_H/2)` as an **avocado** (procedural shapes):
-    - outer dark-green ellipse
-    - inner light-green ellipse inset
-    - brown pit circle slightly downward
-    - simple gun/aim indicator pointing toward mouse
-  - Enemies: simple circles with outline; bullets: small bright circles.
-  - Optional: a world-space grid to visually confirm camera scrolling.
-- Collision model:
-  - Use circle distance checks: `dist <= (r1 + r2)`.
-  - Bullet hit removes enemy + bullet; win when enemy list empty.
-  - Enemy contact applies HP damage using a cooldown timer.
+## Implemented today
+
+- **Player position**: `player_pos: Vector2` in `main.py` (world space); not yet a `Player` class.
+- **Movement**: arrow keys + WASD; normalize diagonal before `player_pos += move * PLAYER_SPEED * dt`.
+- **Aim**: `mouse_world = screen_to_world(mouse_screen, camera, WINDOW_W, WINDOW_H)`; `aim_dir = (mouse_world - player_pos).normalize()` (fallback `Vector2(1, 0)` if zero).
+- **Hero render**: PNG sprite from `PLAYER_SPRITE_PATH` in `img/`:
+  - Load with `pygame.image.load(...).convert_alpha()` — **do not** `set_colorkey`; background is already transparent.
+  - Scale to `PLAYER_SPRITE_SIZE`; prebuild left/right via horizontal flip; pick sprite by `aim_dir.x >= 0`.
+  - Blit centered at `(WINDOW_W/2, WINDOW_H/2)` with small Y offset (`+8`).
+- **Cursor**: system mouse hidden; `draw_gunpoint` draws crosshair at `pygame.mouse.get_pos()` (screen space).
+- **World grid**: `draw_world_grid` in `main.py`; minor/major lines via `GRID_*` settings.
+
+## Rendering conventions
+
+| Thing | Space | How |
+|-------|--------|-----|
+| Player hero | Screen (center) | `blit` sprite at window center |
+| Gunpoint UI | Screen | `draw_gunpoint(mouse_screen)` |
+| Grid, origin marker | World → screen | `world_to_screen(..., camera, WINDOW_W, WINDOW_H)` |
+| Enemies, bullets (planned) | World → screen | same transform as grid |
+
+## Planned entities (`game/entities.py`)
+
+- `Player(pos, hp, radius, speed)`
+- `Enemy(pos, radius, speed)`
+- `Bullet(pos, vel, radius, born_ms or ttl_ms)`
+
+## Planned spawning & collisions
+
+- Spawn enemies **outside visible screen** using camera/player position + window half-extents.
+- **Circle collisions**: `distance <= (r1 + r2)`.
+- Bullet hit: remove enemy + bullet; win when enemy list empty.
+- Enemy–player contact: HP damage with `get_ticks()` cooldown (e.g. 300ms).
+
+Enemies/bullets: simple procedural circles unless art is added under `img/`.

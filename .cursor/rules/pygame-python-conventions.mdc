@@ -1,21 +1,48 @@
 ---
-description: Python/Pygame conventions for main loop, input, and timing.
+description: Python/Pygame conventions for this repo's main loop, input, and timing.
 globs: **/*.py
 alwaysApply: false
 ---
 
 # Python/Pygame Conventions
 
-- Keep constants near the top (`WINDOW_W=1000`, `WINDOW_H=800`, speeds, radii, cooldowns).
-- Main loop structure should be consistent:
-  - handle events (quit, restart hotkeys)
-  - sample input state (keys + mouse)
-  - update simulation with `dt`
-  - resolve collisions + state transitions
-  - render using camera transform
-  - `clock.tick(FPS)` for stable frame pacing
-- Use `pygame.math.Vector2` for positions/velocities; normalize carefully (handle zero-length).
-- Use `pygame.time.get_ticks()` for:
-  - auto-fire interval (500ms)
-  - enemy contact damage cooldown (avoid instant death)
-- Avoid pixel-per-frame logic; all speeds should be **pixels per second** multiplied by `dt`.
+## Constants
+
+- Put tunables in `game/settings.py` (`WINDOW_W/H`, `FPS_CAP`, `PLAYER_SPEED`, `GRID_*`, `PLAYER_SPRITE_*`).
+- Import settings into `main.py` / other modules; avoid duplicating magic numbers.
+
+## Main loop (`main.py`)
+
+Order each frame:
+
+1. `dt = clock.tick(FPS_CAP) / 1000.0`
+2. Events (quit, `K_ESCAPE`)
+3. Input: `pygame.key.get_pressed()` + mouse
+4. Update simulation with `dt` (movement, bullets, enemies — as added)
+5. `camera.pos = player_pos` (or `player.pos`)
+6. Render: `screen.fill` → grid → entities → player sprite → gunpoint → `flip()`
+7. `finally`: restore `pygame.mouse.set_visible(True)` and `pygame.quit()`
+
+## Input (current)
+
+- Move: arrows **or** WASD (`K_LEFT`/`a`, `K_RIGHT`/`d`, `K_UP`/`w`, `K_DOWN`/`s`).
+- Aim: mouse in screen coords → `screen_to_world` for world-space direction.
+- Quit: window close or `ESC`.
+
+## Sprites & display
+
+- Call `pygame.display.set_mode` before `convert_alpha()` on loaded images.
+- Hero PNG: `convert_alpha()` only; never strip transparency with colorkey.
+- Hide OS cursor during play: `pygame.mouse.set_visible(False)` after `set_mode`.
+
+## Math & timers
+
+- Use `pygame.math.Vector2`; normalize only when `length_squared() > 0`.
+- All speeds: **units per second × dt** (not per frame).
+- Interval logic (fire rate, damage cooldown): `pygame.time.get_ticks()` deltas in milliseconds.
+
+## Style
+
+- Prefer `from __future__ import annotations` in new `game/` modules.
+- Type hints on public helpers (`load_player_sprite`, camera transforms).
+- `Vec2 = pygame.math.Vector2` alias is fine in `main.py` for brevity.

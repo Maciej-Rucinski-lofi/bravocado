@@ -1,11 +1,18 @@
 from pathlib import Path
 
 import pygame
+from dataclasses import dataclass
 
 from game.camera import Camera, screen_to_world, world_to_screen
 from game.settings import (
     BG_COLOR,
+    BULLET_COLOR,
+    BULLET_MUZZLE_OFFSET,
+    BULLET_RADIUS,
+    BULLET_SPEED,
+    BULLET_TTL_MS,
     FPS_CAP,
+    FIRE_INTERVAL_MS,
     GRID_MAJOR_COLOR,
     GRID_MAJOR_EVERY,
     GRID_MINOR_COLOR,
@@ -19,6 +26,13 @@ from game.settings import (
 
 
 Vec2 = pygame.math.Vector2
+
+
+@dataclass
+class Bullet:
+    pos: Vec2
+    vel: Vec2
+    born_ms: int
 
 
 def load_player_sprite() -> tuple[pygame.Surface, pygame.Surface]:
@@ -94,6 +108,17 @@ def draw_world_grid(screen: pygame.Surface, camera: Camera) -> None:
     pygame.draw.circle(screen, (10, 10, 12), origin, 6, 2)
 
 
+def draw_bullets(screen: pygame.Surface, camera: Camera, bullets: list[Bullet]) -> None:
+    for bullet in bullets:
+        bullet_screen = world_to_screen(bullet.pos, camera, WINDOW_W, WINDOW_H)
+        pygame.draw.circle(
+            screen,
+            BULLET_COLOR,
+            (int(bullet_screen.x), int(bullet_screen.y)),
+            BULLET_RADIUS,
+        )
+
+
 def main() -> int:
     pygame.init()
     try:
@@ -106,10 +131,13 @@ def main() -> int:
         # Temporary world-space player position for verifying camera math (Step 2).
         player_pos = Vec2(0, 0)
         camera = Camera(pos=player_pos.copy())
+        bullets: list[Bullet] = []
+        last_shot_ms = pygame.time.get_ticks() - FIRE_INTERVAL_MS
 
         running = True
         while running:
             dt = clock.tick(FPS_CAP) / 1000.0
+            now_ms = pygame.time.get_ticks()
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -140,6 +168,24 @@ def main() -> int:
             aim = mouse_world - player_pos
             aim_dir = aim.normalize() if aim.length_squared() > 0 else Vec2(1, 0)
 
+            if now_ms - last_shot_ms >= FIRE_INTERVAL_MS:
+                bullets.append(
+                    Bullet(
+                        pos=player_pos + (aim_dir * BULLET_MUZZLE_OFFSET),
+                        vel=aim_dir * BULLET_SPEED,
+                        born_ms=now_ms,
+                    )
+                )
+                last_shot_ms = now_ms
+
+            alive_bullets: list[Bullet] = []
+            for bullet in bullets:
+                bullet.pos += bullet.vel * dt
+                if now_ms - bullet.born_ms <= BULLET_TTL_MS:
+                    alive_bullets.append(bullet)
+            bullets = alive_bullets
+
+            draw_bullets(screen, camera, bullets)
             draw_player_sprite(screen, center, aim_dir, player_sprite_right, player_sprite_left)
             draw_gunpoint(screen, mouse_screen)
 
