@@ -20,13 +20,21 @@ from game.settings import (
     ENEMY_RADIUS,
     ENEMY_SPAWN_EXTRA,
     ENEMY_SPAWN_PADDING,
+    ENEMY_SPEED,
     FPS_CAP,
     FIRE_INTERVAL_MS,
+    CONTACT_DAMAGE,
+    CONTACT_DAMAGE_COOLDOWN_MS,
+    HP_BAR_H,
+    HP_BAR_MARGIN,
+    HP_BAR_W,
     GRID_MAJOR_COLOR,
     GRID_MAJOR_EVERY,
     GRID_MINOR_COLOR,
     GRID_SPACING,
     PLAYER_SPEED,
+    PLAYER_HP_MAX,
+    PLAYER_RADIUS,
     PLAYER_SPRITE_PATH,
     PLAYER_SPRITE_SIZE,
     WINDOW_H,
@@ -190,6 +198,24 @@ def draw_enemies(screen: pygame.Surface, camera: Camera, enemies: list[Enemy]) -
         )
 
 
+def draw_hp_bar(screen: pygame.Surface, hp: int, hp_max: int) -> None:
+    bar_rect = pygame.Rect(HP_BAR_MARGIN, HP_BAR_MARGIN, HP_BAR_W, HP_BAR_H)
+    pygame.draw.rect(screen, (18, 18, 24), bar_rect)
+    pygame.draw.rect(screen, (220, 220, 230), bar_rect, 2)
+
+    hp_ratio = 0.0 if hp_max <= 0 else max(0.0, min(1.0, hp / hp_max))
+    fill_w = int((HP_BAR_W - 4) * hp_ratio)
+    fill_rect = pygame.Rect(HP_BAR_MARGIN + 2, HP_BAR_MARGIN + 2, fill_w, HP_BAR_H - 4)
+
+    if hp_ratio > 0.6:
+        fill_color = (72, 210, 100)
+    elif hp_ratio > 0.3:
+        fill_color = (230, 190, 70)
+    else:
+        fill_color = (220, 80, 80)
+    pygame.draw.rect(screen, fill_color, fill_rect)
+
+
 def main() -> int:
     pygame.init()
     try:
@@ -205,6 +231,8 @@ def main() -> int:
         bullets: list[Bullet] = []
         enemies = spawn_enemies(player_pos, ENEMY_COUNT)
         last_shot_ms = pygame.time.get_ticks() - FIRE_INTERVAL_MS
+        player_hp = PLAYER_HP_MAX
+        last_contact_damage_ms = pygame.time.get_ticks() - CONTACT_DAMAGE_COOLDOWN_MS
 
         running = True
         while running:
@@ -227,6 +255,11 @@ def main() -> int:
             if move.length_squared() > 0:
                 move = move.normalize()
                 player_pos += move * PLAYER_SPEED * dt
+
+            for enemy in enemies:
+                to_player = player_pos - enemy.pos
+                if to_player.length_squared() > 0:
+                    enemy.pos += to_player.normalize() * ENEMY_SPEED * dt
 
             camera.pos = player_pos
 
@@ -257,10 +290,35 @@ def main() -> int:
                     alive_bullets.append(bullet)
             bullets = alive_bullets
 
+            killed_enemy_ids: set[int] = set()
+            killed_bullet_ids: set[int] = set()
+            bullet_hit_radius = BULLET_RADIUS + ENEMY_RADIUS
+            bullet_hit_radius_sq = bullet_hit_radius * bullet_hit_radius
+            for enemy in enemies:
+                enemy_id = id(enemy)
+                for bullet in bullets:
+                    bullet_id = id(bullet)
+                    if bullet_id in killed_bullet_ids:
+                        continue
+                    if (bullet.pos - enemy.pos).length_squared() <= bullet_hit_radius_sq:
+                        killed_enemy_ids.add(enemy_id)
+                        killed_bullet_ids.add(bullet_id)
+                        break
+            enemies = [enemy for enemy in enemies if id(enemy) not in killed_enemy_ids]
+            bullets = [bullet for bullet in bullets if id(bullet) not in killed_bullet_ids]
+
+            touching_enemy = any(
+                (enemy.pos - player_pos).length_squared() <= (ENEMY_RADIUS + PLAYER_RADIUS) ** 2 for enemy in enemies
+            )
+            if touching_enemy and now_ms - last_contact_damage_ms >= CONTACT_DAMAGE_COOLDOWN_MS:
+                player_hp = max(0, player_hp - CONTACT_DAMAGE)
+                last_contact_damage_ms = now_ms
+
             draw_bullets(screen, camera, bullets)
             draw_enemies(screen, camera, enemies)
             draw_player_sprite(screen, center, aim_dir, player_sprite_right, player_sprite_left)
             draw_gunpoint(screen, mouse_screen)
+            draw_hp_bar(screen, player_hp, PLAYER_HP_MAX)
 
             pygame.display.flip()
     finally:
