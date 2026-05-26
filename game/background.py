@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable
+import random
 
 import pygame
 
@@ -15,18 +15,22 @@ from game.settings import (
     TREE_TRUNK_COLOR,
     TREE_CANOPY_COLOR,
     TREE_CANOPY_OUTLINE_COLOR,
-    TREE_SPECS,
+    TREE_CELL_SPACING,
+    TREE_DENSITY,
+    TREE_SCALE_MIN,
+    TREE_SCALE_MAX,
     WINDOW_H,
     WINDOW_W,
 )
 
 
 Vec2 = pygame.math.Vector2
+WORLD_SEED = random.randint(0, 1_000_000_000)
 
 
-def _hash2(ix: int, iy: int) -> int:
-    # Small, deterministic integer hash (no random module).
-    n = ix * 374761393 + iy * 668265263
+def _hash2(ix: int, iy: int, salt: int = 0) -> int:
+    # Small seeded integer hash to randomize world layout each run.
+    n = ix * 374761393 + iy * 668265263 + WORLD_SEED + (salt * 982_451_653)
     n = (n ^ (n >> 13)) * 1274126177
     return n ^ (n >> 16)
 
@@ -79,28 +83,40 @@ def draw_meadow(screen: pygame.Surface, camera: Camera) -> None:
                     color = MEADOW_FLOWER_COLORS[(fk >> 16) % len(MEADOW_FLOWER_COLORS)]
                     pygame.draw.circle(screen, color, (int(p.x), int(p.y)), 2)
 
-    _draw_trees(screen, camera, TREE_SPECS)
+    _draw_trees(screen, camera)
 
 
-def _draw_trees(screen: pygame.Surface, camera: Camera, trees: Iterable[tuple[float, float, float]]) -> None:
+def _draw_trees(screen: pygame.Surface, camera: Camera) -> None:
     left, right, top, bottom = _visible_world_rect(camera)
+    step = TREE_CELL_SPACING
+    start_x = int((left - step) // step)
+    end_x = int((right + step) // step) + 1
+    start_y = int((top - step) // step)
+    end_y = int((bottom + step) // step) + 1
 
-    # Draw trees only if their trunk base is in/near view.
-    margin = 240.0
-    for x, y, scale in trees:
-        if x < left - margin or x > right + margin or y < top - margin or y > bottom + margin:
-            continue
+    for ix in range(start_x, end_x):
+        for iy in range(start_y, end_y):
+            h = _hash2(ix, iy, salt=17)
+            if ((h & 0xFFFF) / 65535.0) > TREE_DENSITY:
+                continue
 
-        base = Vec2(x, y)
-        p = world_to_screen(base, camera, WINDOW_W, WINDOW_H)
-        trunk_w = int(18 * scale)
-        trunk_h = int(42 * scale)
-        canopy_r = int(34 * scale)
+            jx = ((h >> 8) & 0xFF) / 255.0 - 0.5
+            jy = ((h >> 16) & 0xFF) / 255.0 - 0.5
+            x = (ix + 0.5 + jx * 0.65) * step
+            y = (iy + 0.5 + jy * 0.65) * step
 
-        trunk = pygame.Rect(int(p.x - trunk_w / 2), int(p.y - trunk_h), trunk_w, trunk_h)
-        pygame.draw.rect(screen, TREE_TRUNK_COLOR, trunk, border_radius=max(2, int(4 * scale)))
+            scale_t = ((h >> 24) & 0xFF) / 255.0
+            scale = TREE_SCALE_MIN + (TREE_SCALE_MAX - TREE_SCALE_MIN) * scale_t
+            base = Vec2(x, y)
+            p = world_to_screen(base, camera, WINDOW_W, WINDOW_H)
+            trunk_w = int(18 * scale)
+            trunk_h = int(42 * scale)
+            canopy_r = int(34 * scale)
 
-        canopy_center = (int(p.x), int(p.y - trunk_h))
-        pygame.draw.circle(screen, TREE_CANOPY_COLOR, canopy_center, canopy_r)
-        pygame.draw.circle(screen, TREE_CANOPY_OUTLINE_COLOR, canopy_center, canopy_r, 2)
+            trunk = pygame.Rect(int(p.x - trunk_w / 2), int(p.y - trunk_h), trunk_w, trunk_h)
+            pygame.draw.rect(screen, TREE_TRUNK_COLOR, trunk, border_radius=max(2, int(4 * scale)))
+
+            canopy_center = (int(p.x), int(p.y - trunk_h))
+            pygame.draw.circle(screen, TREE_CANOPY_COLOR, canopy_center, canopy_r)
+            pygame.draw.circle(screen, TREE_CANOPY_OUTLINE_COLOR, canopy_center, canopy_r, 2)
 

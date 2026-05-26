@@ -43,6 +43,9 @@ from game.settings import (
 
 
 Vec2 = pygame.math.Vector2
+PLAYING = "PLAYING"
+WIN = "WIN"
+GAME_OVER = "GAME_OVER"
 
 
 @dataclass
@@ -216,6 +219,24 @@ def draw_hp_bar(screen: pygame.Surface, hp: int, hp_max: int) -> None:
     pygame.draw.rect(screen, fill_color, fill_rect)
 
 
+def draw_state_overlay(screen: pygame.Surface, title: str, subtitle: str) -> None:
+    title_font = pygame.font.Font(None, 82)
+    subtitle_font = pygame.font.Font(None, 36)
+    title_surf = title_font.render(title, True, (250, 250, 250))
+    subtitle_surf = subtitle_font.render(subtitle, True, (225, 225, 225))
+
+    title_rect = title_surf.get_rect(center=(WINDOW_W // 2, WINDOW_H // 2 - 26))
+    subtitle_rect = subtitle_surf.get_rect(center=(WINDOW_W // 2, WINDOW_H // 2 + 30))
+
+    # Draw soft dark shadows for readability over the scene.
+    shadow_title_rect = title_rect.move(2, 2)
+    shadow_subtitle_rect = subtitle_rect.move(2, 2)
+    screen.blit(title_font.render(title, True, (20, 20, 20)), shadow_title_rect)
+    screen.blit(subtitle_font.render(subtitle, True, (20, 20, 20)), shadow_subtitle_rect)
+    screen.blit(title_surf, title_rect)
+    screen.blit(subtitle_surf, subtitle_rect)
+
+
 def main() -> int:
     pygame.init()
     try:
@@ -225,14 +246,19 @@ def main() -> int:
         pygame.mouse.set_visible(False)
         player_sprite_right, player_sprite_left = load_player_sprite()
 
-        # Temporary world-space player position for verifying camera math (Step 2).
-        player_pos = Vec2(0, 0)
-        camera = Camera(pos=player_pos.copy())
-        bullets: list[Bullet] = []
-        enemies = spawn_enemies(player_pos, ENEMY_COUNT)
-        last_shot_ms = pygame.time.get_ticks() - FIRE_INTERVAL_MS
-        player_hp = PLAYER_HP_MAX
-        last_contact_damage_ms = pygame.time.get_ticks() - CONTACT_DAMAGE_COOLDOWN_MS
+        def reset_round() -> tuple[Vec2, Camera, list[Bullet], list[Enemy], int, int, int]:
+            player_pos = Vec2(0, 0)
+            camera = Camera(pos=player_pos.copy())
+            bullets: list[Bullet] = []
+            enemies = spawn_enemies(player_pos, ENEMY_COUNT)
+            now_ms = pygame.time.get_ticks()
+            last_shot_ms = now_ms - FIRE_INTERVAL_MS
+            player_hp = PLAYER_HP_MAX
+            last_contact_damage_ms = now_ms - CONTACT_DAMAGE_COOLDOWN_MS
+            return player_pos, camera, bullets, enemies, last_shot_ms, player_hp, last_contact_damage_ms
+
+        player_pos, camera, bullets, enemies, last_shot_ms, player_hp, last_contact_damage_ms = reset_round()
+        game_state = PLAYING
 
         running = True
         while running:
@@ -244,24 +270,28 @@ def main() -> int:
                     running = False
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     running = False
+                elif event.type == pygame.KEYDOWN and event.key == pygame.K_r and game_state != PLAYING:
+                    player_pos, camera, bullets, enemies, last_shot_ms, player_hp, last_contact_damage_ms = reset_round()
+                    game_state = PLAYING
 
             keys = pygame.key.get_pressed()
-            move = Vec2(
-                (1 if (keys[pygame.K_RIGHT] or keys[pygame.K_d]) else 0)
-                - (1 if (keys[pygame.K_LEFT] or keys[pygame.K_a]) else 0),
-                (1 if (keys[pygame.K_DOWN] or keys[pygame.K_s]) else 0)
-                - (1 if (keys[pygame.K_UP] or keys[pygame.K_w]) else 0),
-            )
-            if move.length_squared() > 0:
-                move = move.normalize()
-                player_pos += move * PLAYER_SPEED * dt
+            if game_state == PLAYING:
+                move = Vec2(
+                    (1 if (keys[pygame.K_RIGHT] or keys[pygame.K_d]) else 0)
+                    - (1 if (keys[pygame.K_LEFT] or keys[pygame.K_a]) else 0),
+                    (1 if (keys[pygame.K_DOWN] or keys[pygame.K_s]) else 0)
+                    - (1 if (keys[pygame.K_UP] or keys[pygame.K_w]) else 0),
+                )
+                if move.length_squared() > 0:
+                    move = move.normalize()
+                    player_pos += move * PLAYER_SPEED * dt
 
-            for enemy in enemies:
-                to_player = player_pos - enemy.pos
-                if to_player.length_squared() > 0:
-                    enemy.pos += to_player.normalize() * ENEMY_SPEED * dt
+                for enemy in enemies:
+                    to_player = player_pos - enemy.pos
+                    if to_player.length_squared() > 0:
+                        enemy.pos += to_player.normalize() * ENEMY_SPEED * dt
 
-            camera.pos = player_pos
+                camera.pos = player_pos
 
             draw_meadow(screen, camera)
 
@@ -272,7 +302,7 @@ def main() -> int:
             aim = mouse_world - player_pos
             aim_dir = aim.normalize() if aim.length_squared() > 0 else Vec2(1, 0)
 
-            if now_ms - last_shot_ms >= FIRE_INTERVAL_MS:
+            if game_state == PLAYING and now_ms - last_shot_ms >= FIRE_INTERVAL_MS:
                 bullets.append(
                     Bullet(
                         pos=player_pos + (aim_dir * BULLET_MUZZLE_OFFSET),
@@ -282,42 +312,52 @@ def main() -> int:
                 )
                 last_shot_ms = now_ms
 
-            alive_bullets: list[Bullet] = []
-            for bullet in bullets:
-                bullet.pos += bullet.vel * dt
-                if now_ms - bullet.born_ms <= BULLET_TTL_MS:
-                    alive_bullets.append(bullet)
-            bullets = alive_bullets
-
-            killed_enemy_ids: set[int] = set()
-            killed_bullet_ids: set[int] = set()
-            bullet_hit_radius = BULLET_RADIUS + ENEMY_RADIUS
-            bullet_hit_radius_sq = bullet_hit_radius * bullet_hit_radius
-            for enemy in enemies:
-                enemy_id = id(enemy)
+            if game_state == PLAYING:
+                alive_bullets: list[Bullet] = []
                 for bullet in bullets:
-                    bullet_id = id(bullet)
-                    if bullet_id in killed_bullet_ids:
-                        continue
-                    if (bullet.pos - enemy.pos).length_squared() <= bullet_hit_radius_sq:
-                        killed_enemy_ids.add(enemy_id)
-                        killed_bullet_ids.add(bullet_id)
-                        break
-            enemies = [enemy for enemy in enemies if id(enemy) not in killed_enemy_ids]
-            bullets = [bullet for bullet in bullets if id(bullet) not in killed_bullet_ids]
+                    bullet.pos += bullet.vel * dt
+                    if now_ms - bullet.born_ms <= BULLET_TTL_MS:
+                        alive_bullets.append(bullet)
+                bullets = alive_bullets
 
-            touching_enemy = any(
-                (enemy.pos - player_pos).length_squared() <= (ENEMY_RADIUS + PLAYER_RADIUS) ** 2 for enemy in enemies
-            )
-            if touching_enemy and now_ms - last_contact_damage_ms >= CONTACT_DAMAGE_COOLDOWN_MS:
-                player_hp = max(0, player_hp - CONTACT_DAMAGE)
-                last_contact_damage_ms = now_ms
+                killed_enemy_ids: set[int] = set()
+                killed_bullet_ids: set[int] = set()
+                bullet_hit_radius = BULLET_RADIUS + ENEMY_RADIUS
+                bullet_hit_radius_sq = bullet_hit_radius * bullet_hit_radius
+                for enemy in enemies:
+                    enemy_id = id(enemy)
+                    for bullet in bullets:
+                        bullet_id = id(bullet)
+                        if bullet_id in killed_bullet_ids:
+                            continue
+                        if (bullet.pos - enemy.pos).length_squared() <= bullet_hit_radius_sq:
+                            killed_enemy_ids.add(enemy_id)
+                            killed_bullet_ids.add(bullet_id)
+                            break
+                enemies = [enemy for enemy in enemies if id(enemy) not in killed_enemy_ids]
+                bullets = [bullet for bullet in bullets if id(bullet) not in killed_bullet_ids]
+
+                touching_enemy = any(
+                    (enemy.pos - player_pos).length_squared() <= (ENEMY_RADIUS + PLAYER_RADIUS) ** 2 for enemy in enemies
+                )
+                if touching_enemy and now_ms - last_contact_damage_ms >= CONTACT_DAMAGE_COOLDOWN_MS:
+                    player_hp = max(0, player_hp - CONTACT_DAMAGE)
+                    last_contact_damage_ms = now_ms
+
+                if player_hp <= 0:
+                    game_state = GAME_OVER
+                elif not enemies:
+                    game_state = WIN
 
             draw_bullets(screen, camera, bullets)
             draw_enemies(screen, camera, enemies)
             draw_player_sprite(screen, center, aim_dir, player_sprite_right, player_sprite_left)
             draw_gunpoint(screen, mouse_screen)
             draw_hp_bar(screen, player_hp, PLAYER_HP_MAX)
+            if game_state == WIN:
+                draw_state_overlay(screen, "You Win!", "Press R to restart, ESC to quit")
+            elif game_state == GAME_OVER:
+                draw_state_overlay(screen, "Game Over", "Press R to restart, ESC to quit")
 
             pygame.display.flip()
     finally:

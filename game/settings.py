@@ -9,31 +9,25 @@ GRID_MAJOR_COLOR = (60, 60, 75)
 GRID_MAJOR_EVERY = 5  # major line every N minor lines
 
 # Meadow background (visual-only, no collisions)
-MEADOW_BASE_COLOR = (78, 168, 88)
-MEADOW_PATCH_COLOR = (92, 186, 98)
+MEADOW_BASE_COLOR = (34, 88, 50)
+MEADOW_PATCH_COLOR = (46, 102, 60)
 MEADOW_PATCH_SPACING = 260.0
 MEADOW_PATCH_RADIUS = 150.0
 MEADOW_FLOWER_DENSITY = 0.8
 MEADOW_FLOWER_COLORS = (
-    (250, 245, 235),  # white
-    (255, 232, 120),  # yellow
-    (255, 168, 198),  # pink
-    (190, 210, 255),  # light blue
+    (212, 208, 205),  # soft white
+    (205, 182, 110),  # muted yellow
+    (194, 138, 160),  # muted pink
+    (140, 160, 198),  # muted blue
 )
 
 TREE_TRUNK_COLOR = (105, 72, 40)
-TREE_CANOPY_COLOR = (42, 120, 58)
-TREE_CANOPY_OUTLINE_COLOR = (22, 70, 36)
-
-# Each entry: (x_world, y_world, scale)
-TREE_SPECS = (
-    (-420.0, -260.0, 1.05),
-    (380.0, -320.0, 1.15),
-    (760.0, 140.0, 0.95),
-    (-780.0, 220.0, 1.25),
-    (120.0, 520.0, 1.10),
-    (-160.0, 820.0, 0.90),
-)
+TREE_CANOPY_COLOR = (28, 84, 50)
+TREE_CANOPY_OUTLINE_COLOR = (16, 48, 30)
+TREE_CELL_SPACING = 260.0
+TREE_DENSITY = 0.42  # chance [0..1] for a tree in each cell
+TREE_SCALE_MIN = 0.85
+TREE_SCALE_MAX = 1.30
 
 PLAYER_SPEED = 320.0  # world units per second
 
@@ -42,7 +36,8 @@ PLAYER_SPRITE_PATH = "img/bravocado-points-one-hand-no-bg.PNG"
 PLAYER_SPRITE_SIZE = (110, 110)
 
 # Step 4: auto-fire bullets
-FIRE_INTERVAL_MS = 500
+# FIRE_INTERVAL_MS = 200
+FIRE_INTERVAL_MS = 20 # Just for testing
 BULLET_SPEED = 700.0
 BULLET_TTL_MS = 1800
 BULLET_RADIUS = 5
@@ -50,14 +45,14 @@ BULLET_MUZZLE_OFFSET = 52.0
 BULLET_COLOR = (255, 220, 90)
 
 # Step 5: enemy spawn + rendering
-ENEMY_COUNT = 18
+ENEMY_COUNT = 100
 ENEMY_RADIUS = 20
-ENEMY_SPAWN_PADDING = 140.0
+ENEMY_SPAWN_PADDING = 100.0
 ENEMY_SPAWN_EXTRA = 260.0
 ENEMY_BODY_COLOR = (190, 55, 55)
 ENEMY_OUTLINE_COLOR = (45, 12, 12)
 ENEMY_FACE_COLOR = (28, 8, 8)
-ENEMY_SPEED = 96.0
+ENEMY_SPEED = 110.0
 
 # Step 6: contact damage + HP
 PLAYER_RADIUS = 28
