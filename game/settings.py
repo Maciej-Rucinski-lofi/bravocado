@@ -8,4 +8,8 @@ GRID_MINOR_COLOR = (38, 38, 46)
 GRID_MAJOR_COLOR = (60, 60, 75)
 GRID_MAJOR_EVERY = 5  # major line every N minor lines
 
-DEBUG_PLAYER_SPEED = 320.0  # world units per second
+PLAYER_SPEED = 320.0  # world units per second
+
+# Player hero sprite (screen-space, centered)
+PLAYER_SPRITE_PATH = "img/bravocado-points-one-hand-no-bg.PNG"
+PLAYER_SPRITE_SIZE = (110, 110)
