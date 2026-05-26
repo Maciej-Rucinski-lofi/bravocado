@@ -30,6 +30,7 @@ from game.settings import (
     HP_BAR_H,
     HP_BAR_MARGIN,
     HP_BAR_W,
+    SCORE_PER_KILL,
     GRID_MAJOR_COLOR,
     GRID_MAJOR_EVERY,
     GRID_MINOR_COLOR,
@@ -221,6 +222,26 @@ def draw_hp_bar(screen: pygame.Surface, hp: int, hp_max: int) -> None:
     pygame.draw.rect(screen, fill_color, fill_rect)
 
 
+def draw_score(screen: pygame.Surface, score: int) -> None:
+    font = pygame.font.Font(None, 40)
+    text = f"Score: {score}"
+    label = font.render(text, True, (240, 240, 245))
+    shadow = font.render(text, True, (20, 20, 20))
+    rect = label.get_rect(midtop=(WINDOW_W // 2, HP_BAR_MARGIN))
+    screen.blit(shadow, rect.move(2, 2))
+    screen.blit(label, rect)
+
+
+def draw_enemies_left(screen: pygame.Surface, enemies_left: int) -> None:
+    font = pygame.font.Font(None, 34)
+    text = f"Enemies left: {enemies_left}"
+    label = font.render(text, True, (235, 235, 240))
+    shadow = font.render(text, True, (20, 20, 20))
+    rect = label.get_rect(topright=(WINDOW_W - HP_BAR_MARGIN, HP_BAR_MARGIN))
+    screen.blit(shadow, rect.move(2, 2))
+    screen.blit(label, rect)
+
+
 def draw_state_overlay(screen: pygame.Surface, title: str, subtitle: str, offset: Vec2) -> None:
     title_font = pygame.font.Font(None, 82)
     subtitle_font = pygame.font.Font(None, 36)
@@ -248,7 +269,7 @@ def main() -> int:
         pygame.mouse.set_visible(False)
         player_sprite_right, player_sprite_left = load_player_sprite()
 
-        def reset_round() -> tuple[Vec2, Camera, list[Bullet], list[Enemy], int, int, int]:
+        def reset_round() -> tuple[Vec2, Camera, list[Bullet], list[Enemy], int, int, int, int]:
             player_pos = Vec2(0, 0)
             camera = Camera(pos=player_pos.copy())
             bullets: list[Bullet] = []
@@ -257,9 +278,10 @@ def main() -> int:
             last_shot_ms = now_ms - FIRE_INTERVAL_MS
             player_hp = PLAYER_HP_MAX
             last_contact_damage_ms = now_ms - CONTACT_DAMAGE_COOLDOWN_MS
-            return player_pos, camera, bullets, enemies, last_shot_ms, player_hp, last_contact_damage_ms
+            score = 0
+            return player_pos, camera, bullets, enemies, last_shot_ms, player_hp, last_contact_damage_ms, score
 
-        player_pos, camera, bullets, enemies, last_shot_ms, player_hp, last_contact_damage_ms = reset_round()
+        player_pos, camera, bullets, enemies, last_shot_ms, player_hp, last_contact_damage_ms, score = reset_round()
         game_state = PLAYING
         shake_until_ms = 0
 
@@ -274,7 +296,7 @@ def main() -> int:
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     running = False
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_r and game_state != PLAYING:
-                    player_pos, camera, bullets, enemies, last_shot_ms, player_hp, last_contact_damage_ms = reset_round()
+                    player_pos, camera, bullets, enemies, last_shot_ms, player_hp, last_contact_damage_ms, score = reset_round()
                     game_state = PLAYING
                     shake_until_ms = 0
 
@@ -338,6 +360,7 @@ def main() -> int:
                             break
                 enemies = [enemy for enemy in enemies if id(enemy) not in killed_enemy_ids]
                 bullets = [bullet for bullet in bullets if id(bullet) not in killed_bullet_ids]
+                score += len(killed_enemy_ids) * SCORE_PER_KILL
 
                 touching_enemy = any(
                     (enemy.pos - player_pos).length_squared() <= (ENEMY_RADIUS + PLAYER_RADIUS) ** 2 for enemy in enemies
@@ -366,6 +389,8 @@ def main() -> int:
             draw_player_sprite(screen, center, aim_dir, player_sprite_right, player_sprite_left)
             draw_gunpoint(screen, mouse_screen)
             draw_hp_bar(screen, player_hp, PLAYER_HP_MAX)
+            draw_score(screen, score)
+            draw_enemies_left(screen, len(enemies))
             if game_state == WIN:
                 draw_state_overlay(screen, "You Win!", "Press R to restart, ESC to quit", shake_offset)
             elif game_state == GAME_OVER:
