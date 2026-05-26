@@ -43,6 +43,7 @@ BULLET_TTL_MS = 1800
 BULLET_RADIUS = 5
 BULLET_MUZZLE_OFFSET = 52.0
 BULLET_COLOR = (255, 220, 90)
+TRIPLE_SHOT_SPREAD_DEG = 14.0  # total angle between outer bullets
 
 # Step 5: enemy spawn + rendering
 ENEMY_COUNT = 200
@@ -53,6 +54,10 @@ ENEMY_BODY_COLOR = (190, 55, 55)
 ENEMY_OUTLINE_COLOR = (45, 12, 12)
 ENEMY_FACE_COLOR = (28, 8, 8)
 ENEMY_SPEED = 110.0
+# Spawn pacing: slow at round start, faster as more enemies enter the queue
+ENEMY_SPAWN_INTERVAL_START_MS = 700
+ENEMY_SPAWN_INTERVAL_END_MS = 90
+ENEMY_SPAWN_RAMP_POWER = 10.0  # higher = sharper ramp (try 2–4 normal, 6–12 intense)
 
 # Step 6: contact damage + HP
 PLAYER_RADIUS = 28

@@ -13,12 +13,16 @@ from game.settings import (
     BULLET_RADIUS,
     BULLET_SPEED,
     BULLET_TTL_MS,
+    TRIPLE_SHOT_SPREAD_DEG,
     ENEMY_BODY_COLOR,
     ENEMY_COUNT,
     ENEMY_FACE_COLOR,
     ENEMY_OUTLINE_COLOR,
     ENEMY_RADIUS,
     ENEMY_SPAWN_EXTRA,
+    ENEMY_SPAWN_INTERVAL_END_MS,
+    ENEMY_SPAWN_INTERVAL_START_MS,
+    ENEMY_SPAWN_RAMP_POWER,
     ENEMY_SPAWN_PADDING,
     ENEMY_SPEED,
     FPS_CAP,
@@ -136,6 +140,37 @@ def draw_world_grid(screen: pygame.Surface, camera: Camera) -> None:
     pygame.draw.circle(screen, (10, 10, 12), origin, 6, 2)
 
 
+def spread_aim_dir(base_dir: Vec2, angle_rad: float) -> Vec2:
+    if angle_rad == 0.0:
+        return base_dir
+    c = math.cos(angle_rad)
+    s = math.sin(angle_rad)
+    return Vec2(base_dir.x * c - base_dir.y * s, base_dir.x * s + base_dir.y * c)
+
+
+def spawn_triple_shot(bullets: list[Bullet], player_pos: Vec2, aim_dir: Vec2, born_ms: int) -> None:
+    half_spread = math.radians(TRIPLE_SHOT_SPREAD_DEG / 2.0)
+    for angle in (-half_spread, 0.0, half_spread):
+        shot_dir = spread_aim_dir(aim_dir, angle)
+        bullets.append(
+            Bullet(
+                pos=player_pos + (shot_dir * BULLET_MUZZLE_OFFSET),
+                vel=shot_dir * BULLET_SPEED,
+                born_ms=born_ms,
+            )
+        )
+
+
+def bullet_in_view(pos: Vec2, camera: Camera) -> bool:
+    half_w = WINDOW_W / 2
+    half_h = WINDOW_H / 2
+    margin = BULLET_RADIUS
+    return (
+        camera.pos.x - half_w - margin <= pos.x <= camera.pos.x + half_w + margin
+        and camera.pos.y - half_h - margin <= pos.y <= camera.pos.y + half_h + margin
+    )
+
+
 def draw_bullets(screen: pygame.Surface, camera: Camera, bullets: list[Bullet]) -> None:
     for bullet in bullets:
         bullet_screen = world_to_screen(bullet.pos, camera, WINDOW_W, WINDOW_H)
@@ -147,19 +182,38 @@ def draw_bullets(screen: pygame.Surface, camera: Camera, bullets: list[Bullet]) 
         )
 
 
-def spawn_enemies(player_pos: Vec2, count: int) -> list[Enemy]:
+def spawn_enemy_offscreen(player_pos: Vec2) -> Enemy:
     half_w = WINDOW_W / 2
     half_h = WINDOW_H / 2
-    min_radius = math.hypot(half_w, half_h) + ENEMY_SPAWN_PADDING
-    max_radius = min_radius + ENEMY_SPAWN_EXTRA
+    side = random.choice(("left", "right", "top", "bottom"))
 
-    enemies: list[Enemy] = []
-    for _ in range(count):
-        angle = random.uniform(0.0, math.tau)
-        distance = random.uniform(min_radius, max_radius)
-        offset = Vec2(math.cos(angle), math.sin(angle)) * distance
-        enemies.append(Enemy(pos=player_pos + offset))
-    return enemies
+    if side == "left":
+        x = player_pos.x - half_w - ENEMY_SPAWN_PADDING - random.uniform(0.0, ENEMY_SPAWN_EXTRA)
+        y = player_pos.y + random.uniform(-half_h, half_h)
+    elif side == "right":
+        x = player_pos.x + half_w + ENEMY_SPAWN_PADDING + random.uniform(0.0, ENEMY_SPAWN_EXTRA)
+        y = player_pos.y + random.uniform(-half_h, half_h)
+    elif side == "top":
+        x = player_pos.x + random.uniform(-half_w, half_w)
+        y = player_pos.y - half_h - ENEMY_SPAWN_PADDING - random.uniform(0.0, ENEMY_SPAWN_EXTRA)
+    else:
+        x = player_pos.x + random.uniform(-half_w, half_w)
+        y = player_pos.y + half_h + ENEMY_SPAWN_PADDING + random.uniform(0.0, ENEMY_SPAWN_EXTRA)
+
+    return Enemy(pos=Vec2(x, y))
+
+
+def enemy_spawn_interval_ms(spawned: int, total: int) -> int:
+    if total <= 0:
+        return ENEMY_SPAWN_INTERVAL_END_MS
+    progress = min(1.0, spawned / total)
+    # Exponential decay: higher power = sharper ramp, but interval still changes
+    # across the whole wave (unlike (1-p)**power which hits min interval early).
+    slowness = math.exp(-ENEMY_SPAWN_RAMP_POWER * progress)
+    return int(
+        ENEMY_SPAWN_INTERVAL_END_MS
+        + (ENEMY_SPAWN_INTERVAL_START_MS - ENEMY_SPAWN_INTERVAL_END_MS) * slowness
+    )
 
 
 def draw_enemies(screen: pygame.Surface, camera: Camera, enemies: list[Enemy]) -> None:
@@ -269,19 +323,43 @@ def main() -> int:
         pygame.mouse.set_visible(False)
         player_sprite_right, player_sprite_left = load_player_sprite()
 
-        def reset_round() -> tuple[Vec2, Camera, list[Bullet], list[Enemy], int, int, int, int]:
+        def reset_round() -> tuple[Vec2, Camera, list[Bullet], list[Enemy], int, int, int, int, int, int]:
             player_pos = Vec2(0, 0)
             camera = Camera(pos=player_pos.copy())
             bullets: list[Bullet] = []
-            enemies = spawn_enemies(player_pos, ENEMY_COUNT)
+            enemies: list[Enemy] = []
             now_ms = pygame.time.get_ticks()
             last_shot_ms = now_ms - FIRE_INTERVAL_MS
             player_hp = PLAYER_HP_MAX
             last_contact_damage_ms = now_ms - CONTACT_DAMAGE_COOLDOWN_MS
             score = 0
-            return player_pos, camera, bullets, enemies, last_shot_ms, player_hp, last_contact_damage_ms, score
+            enemies_to_spawn = ENEMY_COUNT
+            last_enemy_spawn_ms = now_ms - enemy_spawn_interval_ms(0, ENEMY_COUNT)
+            return (
+                player_pos,
+                camera,
+                bullets,
+                enemies,
+                last_shot_ms,
+                player_hp,
+                last_contact_damage_ms,
+                score,
+                enemies_to_spawn,
+                last_enemy_spawn_ms,
+            )
 
-        player_pos, camera, bullets, enemies, last_shot_ms, player_hp, last_contact_damage_ms, score = reset_round()
+        (
+            player_pos,
+            camera,
+            bullets,
+            enemies,
+            last_shot_ms,
+            player_hp,
+            last_contact_damage_ms,
+            score,
+            enemies_to_spawn,
+            last_enemy_spawn_ms,
+        ) = reset_round()
         game_state = PLAYING
         shake_until_ms = 0
 
@@ -296,7 +374,18 @@ def main() -> int:
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     running = False
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_r and game_state != PLAYING:
-                    player_pos, camera, bullets, enemies, last_shot_ms, player_hp, last_contact_damage_ms, score = reset_round()
+                    (
+                        player_pos,
+                        camera,
+                        bullets,
+                        enemies,
+                        last_shot_ms,
+                        player_hp,
+                        last_contact_damage_ms,
+                        score,
+                        enemies_to_spawn,
+                        last_enemy_spawn_ms,
+                    ) = reset_round()
                     game_state = PLAYING
                     shake_until_ms = 0
 
@@ -317,6 +406,15 @@ def main() -> int:
                     if to_player.length_squared() > 0:
                         enemy.pos += to_player.normalize() * ENEMY_SPEED * dt
 
+                while enemies_to_spawn > 0:
+                    spawned = ENEMY_COUNT - enemies_to_spawn
+                    spawn_interval_ms = enemy_spawn_interval_ms(spawned, ENEMY_COUNT)
+                    if now_ms - last_enemy_spawn_ms < spawn_interval_ms:
+                        break
+                    enemies.append(spawn_enemy_offscreen(player_pos))
+                    enemies_to_spawn -= 1
+                    last_enemy_spawn_ms = now_ms
+
                 camera.pos = player_pos
 
             # Player stays centered visually.
@@ -326,21 +424,19 @@ def main() -> int:
             aim = mouse_world - player_pos
             aim_dir = aim.normalize() if aim.length_squared() > 0 else Vec2(1, 0)
 
-            if game_state == PLAYING and now_ms - last_shot_ms >= FIRE_INTERVAL_MS:
-                bullets.append(
-                    Bullet(
-                        pos=player_pos + (aim_dir * BULLET_MUZZLE_OFFSET),
-                        vel=aim_dir * BULLET_SPEED,
-                        born_ms=now_ms,
-                    )
-                )
+            lmb_held = pygame.mouse.get_pressed(num_buttons=3)[0]
+            if game_state == PLAYING and lmb_held and now_ms - last_shot_ms >= FIRE_INTERVAL_MS:
+                spawn_triple_shot(bullets, player_pos, aim_dir, now_ms)
                 last_shot_ms = now_ms
 
             if game_state == PLAYING:
                 alive_bullets: list[Bullet] = []
                 for bullet in bullets:
                     bullet.pos += bullet.vel * dt
-                    if now_ms - bullet.born_ms <= BULLET_TTL_MS:
+                    if (
+                        now_ms - bullet.born_ms <= BULLET_TTL_MS
+                        and bullet_in_view(bullet.pos, camera)
+                    ):
                         alive_bullets.append(bullet)
                 bullets = alive_bullets
 
@@ -372,7 +468,7 @@ def main() -> int:
 
                 if player_hp <= 0:
                     game_state = GAME_OVER
-                elif not enemies:
+                elif enemies_to_spawn == 0 and not enemies:
                     game_state = WIN
 
             shake_offset = Vec2(0, 0)
@@ -390,7 +486,7 @@ def main() -> int:
             draw_gunpoint(screen, mouse_screen)
             draw_hp_bar(screen, player_hp, PLAYER_HP_MAX)
             draw_score(screen, score)
-            draw_enemies_left(screen, len(enemies))
+            draw_enemies_left(screen, len(enemies) + enemies_to_spawn)
             if game_state == WIN:
                 draw_state_overlay(screen, "You Win!", "Press R to restart, ESC to quit", shake_offset)
             elif game_state == GAME_OVER:
