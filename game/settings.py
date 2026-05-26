@@ -8,6 +8,33 @@ GRID_MINOR_COLOR = (38, 38, 46)
 GRID_MAJOR_COLOR = (60, 60, 75)
 GRID_MAJOR_EVERY = 5  # major line every N minor lines
 
+# Meadow background (visual-only, no collisions)
+MEADOW_BASE_COLOR = (78, 168, 88)
+MEADOW_PATCH_COLOR = (92, 186, 98)
+MEADOW_PATCH_SPACING = 260.0
+MEADOW_PATCH_RADIUS = 150.0
+MEADOW_FLOWER_DENSITY = 0.8
+MEADOW_FLOWER_COLORS = (
+    (250, 245, 235),  # white
+    (255, 232, 120),  # yellow
+    (255, 168, 198),  # pink
+    (190, 210, 255),  # light blue
+)
+
+TREE_TRUNK_COLOR = (105, 72, 40)
+TREE_CANOPY_COLOR = (42, 120, 58)
+TREE_CANOPY_OUTLINE_COLOR = (22, 70, 36)
+
+# Each entry: (x_world, y_world, scale)
+TREE_SPECS = (
+    (-420.0, -260.0, 1.05),
+    (380.0, -320.0, 1.15),
+    (760.0, 140.0, 0.95),
+    (-780.0, 220.0, 1.25),
+    (120.0, 520.0, 1.10),
+    (-160.0, 820.0, 0.90),
+)
+
 PLAYER_SPEED = 320.0  # world units per second
 
 # Player hero sprite (screen-space, centered)

@@ -6,8 +6,8 @@ import math
 import random
 
 from game.camera import Camera, screen_to_world, world_to_screen
+from game.background import draw_meadow
 from game.settings import (
-    BG_COLOR,
     BULLET_COLOR,
     BULLET_MUZZLE_OFFSET,
     BULLET_RADIUS,
@@ -263,8 +263,7 @@ def main() -> int:
 
             camera.pos = player_pos
 
-            screen.fill(BG_COLOR)
-            draw_world_grid(screen, camera)
+            draw_meadow(screen, camera)
 
             # Player stays centered visually.
             center = Vec2(WINDOW_W / 2, WINDOW_H / 2)
