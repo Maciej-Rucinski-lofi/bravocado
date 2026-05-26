@@ -25,6 +25,8 @@ from game.settings import (
     FIRE_INTERVAL_MS,
     CONTACT_DAMAGE,
     CONTACT_DAMAGE_COOLDOWN_MS,
+    SCREEN_SHAKE_AMPLITUDE,
+    SCREEN_SHAKE_DURATION_MS,
     HP_BAR_H,
     HP_BAR_MARGIN,
     HP_BAR_W,
@@ -219,14 +221,14 @@ def draw_hp_bar(screen: pygame.Surface, hp: int, hp_max: int) -> None:
     pygame.draw.rect(screen, fill_color, fill_rect)
 
 
-def draw_state_overlay(screen: pygame.Surface, title: str, subtitle: str) -> None:
+def draw_state_overlay(screen: pygame.Surface, title: str, subtitle: str, offset: Vec2) -> None:
     title_font = pygame.font.Font(None, 82)
     subtitle_font = pygame.font.Font(None, 36)
     title_surf = title_font.render(title, True, (250, 250, 250))
     subtitle_surf = subtitle_font.render(subtitle, True, (225, 225, 225))
 
-    title_rect = title_surf.get_rect(center=(WINDOW_W // 2, WINDOW_H // 2 - 26))
-    subtitle_rect = subtitle_surf.get_rect(center=(WINDOW_W // 2, WINDOW_H // 2 + 30))
+    title_rect = title_surf.get_rect(center=(WINDOW_W // 2 + int(offset.x), WINDOW_H // 2 - 26 + int(offset.y)))
+    subtitle_rect = subtitle_surf.get_rect(center=(WINDOW_W // 2 + int(offset.x), WINDOW_H // 2 + 30 + int(offset.y)))
 
     # Draw soft dark shadows for readability over the scene.
     shadow_title_rect = title_rect.move(2, 2)
@@ -259,6 +261,7 @@ def main() -> int:
 
         player_pos, camera, bullets, enemies, last_shot_ms, player_hp, last_contact_damage_ms = reset_round()
         game_state = PLAYING
+        shake_until_ms = 0
 
         running = True
         while running:
@@ -273,6 +276,7 @@ def main() -> int:
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_r and game_state != PLAYING:
                     player_pos, camera, bullets, enemies, last_shot_ms, player_hp, last_contact_damage_ms = reset_round()
                     game_state = PLAYING
+                    shake_until_ms = 0
 
             keys = pygame.key.get_pressed()
             if game_state == PLAYING:
@@ -292,8 +296,6 @@ def main() -> int:
                         enemy.pos += to_player.normalize() * ENEMY_SPEED * dt
 
                 camera.pos = player_pos
-
-            draw_meadow(screen, camera)
 
             # Player stays centered visually.
             center = Vec2(WINDOW_W / 2, WINDOW_H / 2)
@@ -343,21 +345,31 @@ def main() -> int:
                 if touching_enemy and now_ms - last_contact_damage_ms >= CONTACT_DAMAGE_COOLDOWN_MS:
                     player_hp = max(0, player_hp - CONTACT_DAMAGE)
                     last_contact_damage_ms = now_ms
+                    shake_until_ms = max(shake_until_ms, now_ms + SCREEN_SHAKE_DURATION_MS)
 
                 if player_hp <= 0:
                     game_state = GAME_OVER
                 elif not enemies:
                     game_state = WIN
 
-            draw_bullets(screen, camera, bullets)
-            draw_enemies(screen, camera, enemies)
+            shake_offset = Vec2(0, 0)
+            if now_ms < shake_until_ms and SCREEN_SHAKE_DURATION_MS > 0 and SCREEN_SHAKE_AMPLITUDE > 0:
+                t = (shake_until_ms - now_ms) / SCREEN_SHAKE_DURATION_MS
+                magnitude = SCREEN_SHAKE_AMPLITUDE * max(0.0, min(1.0, t))
+                shake_offset = Vec2(random.uniform(-magnitude, magnitude), random.uniform(-magnitude, magnitude))
+
+            render_camera = Camera(pos=camera.pos - shake_offset)
+            draw_meadow(screen, render_camera)
+            draw_bullets(screen, render_camera, bullets)
+            draw_enemies(screen, render_camera, enemies)
+            center = Vec2(WINDOW_W / 2, WINDOW_H / 2) + shake_offset
             draw_player_sprite(screen, center, aim_dir, player_sprite_right, player_sprite_left)
             draw_gunpoint(screen, mouse_screen)
             draw_hp_bar(screen, player_hp, PLAYER_HP_MAX)
             if game_state == WIN:
-                draw_state_overlay(screen, "You Win!", "Press R to restart, ESC to quit")
+                draw_state_overlay(screen, "You Win!", "Press R to restart, ESC to quit", shake_offset)
             elif game_state == GAME_OVER:
-                draw_state_overlay(screen, "Game Over", "Press R to restart, ESC to quit")
+                draw_state_overlay(screen, "Game Over", "Press R to restart, ESC to quit", shake_offset)
 
             pygame.display.flip()
     finally:
