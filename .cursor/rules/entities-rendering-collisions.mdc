@@ -1,0 +1,26 @@
+---
+description: Entity model, rendering expectations, and collisions (procedural avocado).
+globs: **/*.py
+alwaysApply: false
+---
+
+# Entities, Rendering, Collisions
+
+- Entities should be lightweight (dataclass or simple class):
+  - `Player(pos, hp, radius, speed)`
+  - `Enemy(pos, radius, speed)`
+  - `Bullet(pos, vel, radius, ttl_ms or born_ms)`
+- Spawning:
+  - Spawn enemies **outside the visible screen** based on player/camera world position + window half-extents.
+- Rendering:
+  - Player is drawn at `(WINDOW_W/2, WINDOW_H/2)` as an **avocado** (procedural shapes):
+    - outer dark-green ellipse
+    - inner light-green ellipse inset
+    - brown pit circle slightly downward
+    - simple gun/aim indicator pointing toward mouse
+  - Enemies: simple circles with outline; bullets: small bright circles.
+  - Optional: a world-space grid to visually confirm camera scrolling.
+- Collision model:
+  - Use circle distance checks: `dist <= (r1 + r2)`.
+  - Bullet hit removes enemy + bullet; win when enemy list empty.
+  - Enemy contact applies HP damage using a cooldown timer.

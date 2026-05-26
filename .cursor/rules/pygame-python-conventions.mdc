@@ -1,0 +1,21 @@
+---
+description: Python/Pygame conventions for main loop, input, and timing.
+globs: **/*.py
+alwaysApply: false
+---
+
+# Python/Pygame Conventions
+
+- Keep constants near the top (`WINDOW_W=1000`, `WINDOW_H=800`, speeds, radii, cooldowns).
+- Main loop structure should be consistent:
+  - handle events (quit, restart hotkeys)
+  - sample input state (keys + mouse)
+  - update simulation with `dt`
+  - resolve collisions + state transitions
+  - render using camera transform
+  - `clock.tick(FPS)` for stable frame pacing
+- Use `pygame.math.Vector2` for positions/velocities; normalize carefully (handle zero-length).
+- Use `pygame.time.get_ticks()` for:
+  - auto-fire interval (500ms)
+  - enemy contact damage cooldown (avoid instant death)
+- Avoid pixel-per-frame logic; all speeds should be **pixels per second** multiplied by `dt`.

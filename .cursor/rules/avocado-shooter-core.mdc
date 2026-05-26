@@ -1,0 +1,17 @@
+---
+description: Core architecture for the Pygame avocado shooter (camera + world coords).
+alwaysApply: true
+---
+
+# Pygame Avocado Shooter: Core Architecture
+
+- Use **world coordinates** (`pygame.math.Vector2`) for all entities: `player.pos`, `enemy.pos`, `bullet.pos`.
+- Keep the player **drawn at screen center**; move the world via a camera transform.
+- Camera follows player:
+  - `camera.pos = player.pos`
+  - `world_to_screen(p) = p - camera.pos + (WINDOW_W/2, WINDOW_H/2)`
+  - `screen_to_world(s) = s + camera.pos - (WINDOW_W/2, WINDOW_H/2)`
+- Use **dt-based motion** (`seconds`) everywhere: `pos += vel * dt`.
+- Use `pygame.time.get_ticks()` for **cadence** timers (auto-fire 500ms, contact damage cooldown).
+- Collisions: prefer **simple circle** checks for bullet/enemy and enemy/player.
+- Game states: `PLAYING`, `WIN`, `GAME_OVER`; restart should fully reset the run state.

@@ -1,0 +1,11 @@
+WINDOW_W, WINDOW_H = 1000, 800
+FPS_CAP = 120
+
+BG_COLOR = (18, 18, 22)
+
+GRID_SPACING = 80  # world units (pixels)
+GRID_MINOR_COLOR = (38, 38, 46)
+GRID_MAJOR_COLOR = (60, 60, 75)
+GRID_MAJOR_EVERY = 5  # major line every N minor lines
+
+DEBUG_PLAYER_SPEED = 320.0  # world units per second
