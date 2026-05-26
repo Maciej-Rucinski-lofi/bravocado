@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pygame
 from dataclasses import dataclass
+import math
+import random
 
 from game.camera import Camera, screen_to_world, world_to_screen
 from game.settings import (
@@ -11,6 +13,13 @@ from game.settings import (
     BULLET_RADIUS,
     BULLET_SPEED,
     BULLET_TTL_MS,
+    ENEMY_BODY_COLOR,
+    ENEMY_COUNT,
+    ENEMY_FACE_COLOR,
+    ENEMY_OUTLINE_COLOR,
+    ENEMY_RADIUS,
+    ENEMY_SPAWN_EXTRA,
+    ENEMY_SPAWN_PADDING,
     FPS_CAP,
     FIRE_INTERVAL_MS,
     GRID_MAJOR_COLOR,
@@ -33,6 +42,11 @@ class Bullet:
     pos: Vec2
     vel: Vec2
     born_ms: int
+
+
+@dataclass
+class Enemy:
+    pos: Vec2
 
 
 def load_player_sprite() -> tuple[pygame.Surface, pygame.Surface]:
@@ -119,6 +133,63 @@ def draw_bullets(screen: pygame.Surface, camera: Camera, bullets: list[Bullet]) 
         )
 
 
+def spawn_enemies(player_pos: Vec2, count: int) -> list[Enemy]:
+    half_w = WINDOW_W / 2
+    half_h = WINDOW_H / 2
+    min_radius = math.hypot(half_w, half_h) + ENEMY_SPAWN_PADDING
+    max_radius = min_radius + ENEMY_SPAWN_EXTRA
+
+    enemies: list[Enemy] = []
+    for _ in range(count):
+        angle = random.uniform(0.0, math.tau)
+        distance = random.uniform(min_radius, max_radius)
+        offset = Vec2(math.cos(angle), math.sin(angle)) * distance
+        enemies.append(Enemy(pos=player_pos + offset))
+    return enemies
+
+
+def draw_enemies(screen: pygame.Surface, camera: Camera, enemies: list[Enemy]) -> None:
+    for enemy in enemies:
+        p = world_to_screen(enemy.pos, camera, WINDOW_W, WINDOW_H)
+        cx, cy = int(p.x), int(p.y)
+        pygame.draw.circle(screen, ENEMY_BODY_COLOR, (cx, cy), ENEMY_RADIUS)
+        pygame.draw.circle(screen, ENEMY_OUTLINE_COLOR, (cx, cy), ENEMY_RADIUS, 2)
+
+        eye_y = cy - int(ENEMY_RADIUS * 0.3)
+        eye_dx = int(ENEMY_RADIUS * 0.45)
+        eye_r = max(2, int(ENEMY_RADIUS * 0.14))
+        pygame.draw.circle(screen, ENEMY_FACE_COLOR, (cx - eye_dx, eye_y), eye_r)
+        pygame.draw.circle(screen, ENEMY_FACE_COLOR, (cx + eye_dx, eye_y), eye_r)
+
+        brow_len = int(ENEMY_RADIUS * 0.45)
+        brow_drop = int(ENEMY_RADIUS * 0.2)
+        pygame.draw.line(
+            screen,
+            ENEMY_FACE_COLOR,
+            (cx - eye_dx - brow_len // 2, eye_y - brow_drop),
+            (cx - eye_dx + brow_len // 2, eye_y),
+            3,
+        )
+        pygame.draw.line(
+            screen,
+            ENEMY_FACE_COLOR,
+            (cx + eye_dx - brow_len // 2, eye_y),
+            (cx + eye_dx + brow_len // 2, eye_y - brow_drop),
+            3,
+        )
+
+        mouth_w = int(ENEMY_RADIUS * 1.0)
+        mouth_y = cy + int(ENEMY_RADIUS * 0.35)
+        pygame.draw.arc(
+            screen,
+            ENEMY_FACE_COLOR,
+            pygame.Rect(cx - mouth_w // 2, mouth_y - 8, mouth_w, 16),
+            0.1,
+            math.pi - 0.1,
+            3,
+        )
+
+
 def main() -> int:
     pygame.init()
     try:
@@ -132,6 +203,7 @@ def main() -> int:
         player_pos = Vec2(0, 0)
         camera = Camera(pos=player_pos.copy())
         bullets: list[Bullet] = []
+        enemies = spawn_enemies(player_pos, ENEMY_COUNT)
         last_shot_ms = pygame.time.get_ticks() - FIRE_INTERVAL_MS
 
         running = True
@@ -186,6 +258,7 @@ def main() -> int:
             bullets = alive_bullets
 
             draw_bullets(screen, camera, bullets)
+            draw_enemies(screen, camera, enemies)
             draw_player_sprite(screen, center, aim_dir, player_sprite_right, player_sprite_left)
             draw_gunpoint(screen, mouse_screen)
 
