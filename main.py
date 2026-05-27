@@ -5,8 +5,16 @@ from dataclasses import dataclass
 import math
 import random
 
-from game.camera import Camera, screen_to_world, world_to_screen
-from game.background import draw_meadow
+from game.camera import (
+    Camera,
+    clamp_player_centered,
+    clamp_pos_to_map_island,
+    map_half_extents,
+    playable_half_extents,
+    screen_to_world,
+    world_to_screen,
+)
+from game.background import draw_scene
 from game.settings import (
     BULLET_COLOR,
     BULLET_MUZZLE_OFFSET,
@@ -23,6 +31,7 @@ from game.settings import (
     ENEMY_SPAWN_INTERVAL_END_MS,
     ENEMY_SPAWN_INTERVAL_START_MS,
     ENEMY_SPAWN_RAMP_POWER,
+    ENEMY_SPAWN_BORDER_BUFFER,
     ENEMY_SPAWN_PADDING,
     ENEMY_SPEED,
     FPS_CAP,
@@ -44,6 +53,10 @@ from game.settings import (
     PLAYER_RADIUS,
     PLAYER_SPRITE_PATH,
     PLAYER_SPRITE_SIZE,
+    MAP_BORDER_WIDTH,
+    MAP_H,
+    MAP_W,
+    PLAYABLE_EDGE_MARGIN,
     WINDOW_H,
     WINDOW_W,
 )
@@ -182,25 +195,96 @@ def draw_bullets(screen: pygame.Surface, camera: Camera, bullets: list[Bullet]) 
         )
 
 
-def spawn_enemy_offscreen(player_pos: Vec2) -> Enemy:
+def _visible_world_bounds(player_pos: Vec2) -> tuple[float, float, float, float]:
     half_w = WINDOW_W / 2
     half_h = WINDOW_H / 2
-    side = random.choice(("left", "right", "top", "bottom"))
+    return (
+        player_pos.x - half_w,
+        player_pos.x + half_w,
+        player_pos.y - half_h,
+        player_pos.y + half_h,
+    )
+
+
+def _allowed_enemy_spawn_sides(player_pos: Vec2) -> list[str]:
+    playable_half = playable_half_extents(
+        MAP_W, MAP_H, MAP_BORDER_WIDTH, PLAYABLE_EDGE_MARGIN
+    )
+    buffer = ENEMY_SPAWN_BORDER_BUFFER
+    sides: list[str] = []
+    if player_pos.x > -playable_half.x + buffer:
+        sides.append("left")
+    if player_pos.x < playable_half.x - buffer:
+        sides.append("right")
+    if player_pos.y > -playable_half.y + buffer:
+        sides.append("top")
+    if player_pos.y < playable_half.y - buffer:
+        sides.append("bottom")
+    return sides
+
+
+def _spawn_pos_offscreen_on_side(player_pos: Vec2, side: str) -> Vec2 | None:
+    vis_left, vis_right, vis_top, vis_bottom = _visible_world_bounds(player_pos)
+    half_map = map_half_extents(MAP_W, MAP_H)
+    inset = ENEMY_RADIUS
+    map_left = -half_map.x + inset
+    map_right = half_map.x - inset
+    map_top = -half_map.y + inset
+    map_bottom = half_map.y - inset
 
     if side == "left":
-        x = player_pos.x - half_w - ENEMY_SPAWN_PADDING - random.uniform(0.0, ENEMY_SPAWN_EXTRA)
-        y = player_pos.y + random.uniform(-half_h, half_h)
+        x_max = vis_left - ENEMY_SPAWN_PADDING
+        if x_max <= map_left:
+            return None
+        depth = min(ENEMY_SPAWN_EXTRA, x_max - map_left)
+        x = random.uniform(x_max - depth, x_max)
+        y = random.uniform(max(vis_top, map_top), min(vis_bottom, map_bottom))
     elif side == "right":
-        x = player_pos.x + half_w + ENEMY_SPAWN_PADDING + random.uniform(0.0, ENEMY_SPAWN_EXTRA)
-        y = player_pos.y + random.uniform(-half_h, half_h)
+        x_min = vis_right + ENEMY_SPAWN_PADDING
+        if x_min >= map_right:
+            return None
+        depth = min(ENEMY_SPAWN_EXTRA, map_right - x_min)
+        x = random.uniform(x_min, x_min + depth)
+        y = random.uniform(max(vis_top, map_top), min(vis_bottom, map_bottom))
     elif side == "top":
-        x = player_pos.x + random.uniform(-half_w, half_w)
-        y = player_pos.y - half_h - ENEMY_SPAWN_PADDING - random.uniform(0.0, ENEMY_SPAWN_EXTRA)
+        y_max = vis_top - ENEMY_SPAWN_PADDING
+        if y_max <= map_top:
+            return None
+        depth = min(ENEMY_SPAWN_EXTRA, y_max - map_top)
+        y = random.uniform(y_max - depth, y_max)
+        x = random.uniform(max(vis_left, map_left), min(vis_right, map_right))
     else:
-        x = player_pos.x + random.uniform(-half_w, half_w)
-        y = player_pos.y + half_h + ENEMY_SPAWN_PADDING + random.uniform(0.0, ENEMY_SPAWN_EXTRA)
+        y_min = vis_bottom + ENEMY_SPAWN_PADDING
+        if y_min >= map_bottom:
+            return None
+        depth = min(ENEMY_SPAWN_EXTRA, map_bottom - y_min)
+        y = random.uniform(y_min, y_min + depth)
+        x = random.uniform(max(vis_left, map_left), min(vis_right, map_right))
 
-    return Enemy(pos=Vec2(x, y))
+    pos = Vec2(x, y)
+    if vis_left <= pos.x <= vis_right and vis_top <= pos.y <= vis_bottom:
+        return None
+    return pos
+
+
+def spawn_enemy_offscreen(player_pos: Vec2) -> Enemy:
+    sides = _allowed_enemy_spawn_sides(player_pos)
+    random.shuffle(sides)
+    for side in sides:
+        pos = _spawn_pos_offscreen_on_side(player_pos, side)
+        if pos is not None:
+            return Enemy(pos=pos)
+
+    for side in ("left", "right", "top", "bottom"):
+        pos = _spawn_pos_offscreen_on_side(player_pos, side)
+        if pos is not None:
+            return Enemy(pos=pos)
+
+    half_map = map_half_extents(MAP_W, MAP_H)
+    fallback = clamp_pos_to_map_island(
+        player_pos + Vec2(half_map.x, 0), MAP_W, MAP_H, ENEMY_RADIUS
+    )
+    return Enemy(pos=fallback)
 
 
 def enemy_spawn_interval_ms(spawned: int, total: int) -> int:
@@ -405,6 +489,9 @@ def main() -> int:
                     to_player = player_pos - enemy.pos
                     if to_player.length_squared() > 0:
                         enemy.pos += to_player.normalize() * ENEMY_SPEED * dt
+                        enemy.pos = clamp_pos_to_map_island(
+                            enemy.pos, MAP_W, MAP_H, ENEMY_RADIUS
+                        )
 
                 while enemies_to_spawn > 0:
                     spawned = ENEMY_COUNT - enemies_to_spawn
@@ -415,10 +502,17 @@ def main() -> int:
                     enemies_to_spawn -= 1
                     last_enemy_spawn_ms = now_ms
 
+                player_pos = clamp_player_centered(
+                    player_pos,
+                    WINDOW_W,
+                    WINDOW_H,
+                    MAP_W,
+                    MAP_H,
+                    MAP_BORDER_WIDTH,
+                    PLAYABLE_EDGE_MARGIN,
+                )
                 camera.pos = player_pos
 
-            # Player stays centered visually.
-            center = Vec2(WINDOW_W / 2, WINDOW_H / 2)
             mouse_screen = Vec2(pygame.mouse.get_pos())
             mouse_world = screen_to_world(mouse_screen, camera, WINDOW_W, WINDOW_H)
             aim = mouse_world - player_pos
@@ -478,11 +572,11 @@ def main() -> int:
                 shake_offset = Vec2(random.uniform(-magnitude, magnitude), random.uniform(-magnitude, magnitude))
 
             render_camera = Camera(pos=camera.pos - shake_offset)
-            draw_meadow(screen, render_camera)
+            draw_scene(screen, render_camera)
             draw_bullets(screen, render_camera, bullets)
             draw_enemies(screen, render_camera, enemies)
-            center = Vec2(WINDOW_W / 2, WINDOW_H / 2) + shake_offset
-            draw_player_sprite(screen, center, aim_dir, player_sprite_right, player_sprite_left)
+            hero_center = Vec2(WINDOW_W / 2, WINDOW_H / 2) + shake_offset
+            draw_player_sprite(screen, hero_center, aim_dir, player_sprite_right, player_sprite_left)
             draw_gunpoint(screen, mouse_screen)
             draw_hp_bar(screen, player_hp, PLAYER_HP_MAX)
             draw_score(screen, score)

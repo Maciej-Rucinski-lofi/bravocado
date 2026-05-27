@@ -1,6 +1,16 @@
 WINDOW_W, WINDOW_H = 1000, 800
 FPS_CAP = 120
 
+# World island (centered on origin): meadow inside, mud ring, space beyond.
+MAP_W = WINDOW_W * 3
+MAP_H = WINDOW_H * 3
+# Space outside the map (visible when camera nears edges)
+SPACE_COLOR = (0, 0, 0)
+STAR_CELL_SPACING = 100.0
+STAR_DENSITY = 0.78
+STAR_FINE_SPACING = 52.0
+STAR_FINE_DENSITY = 0.62
+
 BG_COLOR = (18, 18, 22)
 
 GRID_SPACING = 80  # world units (pixels)
@@ -8,18 +18,8 @@ GRID_MINOR_COLOR = (38, 38, 46)
 GRID_MAJOR_COLOR = (60, 60, 75)
 GRID_MAJOR_EVERY = 5  # major line every N minor lines
 
-# Meadow background (visual-only, no collisions)
-MEADOW_BASE_COLOR = (34, 88, 50)
-MEADOW_PATCH_COLOR = (46, 102, 60)
-MEADOW_PATCH_SPACING = 260.0
-MEADOW_PATCH_RADIUS = 150.0
-MEADOW_FLOWER_DENSITY = 0.8
-MEADOW_FLOWER_COLORS = (
-    (212, 208, 205),  # soft white
-    (205, 182, 110),  # muted yellow
-    (194, 138, 160),  # muted pink
-    (140, 160, 198),  # muted blue
-)
+# Meadow grass background (tiled sprite, visual-only)
+GRASS_SPRITE_PATH = "img/background/grass.png"
 
 TREE_TRUNK_COLOR = (105, 72, 40)
 TREE_CANOPY_COLOR = (28, 84, 50)
@@ -34,6 +34,12 @@ PLAYER_SPEED = 320.0  # world units per second
 # Player hero sprite (screen-space, centered)
 PLAYER_SPRITE_PATH = "img/bravocado-points-one-hand-no-bg.PNG"
 PLAYER_SPRITE_SIZE = (110, 110)
+
+# Mud border ring (same width as hero sprite)
+MUD_BORDER_SPRITE_PATH = "img/background/mud.jpg"
+MAP_BORDER_WIDTH = PLAYER_SPRITE_SIZE[0]
+# Keep hero body inside the meadow (clear of the mud ring)
+PLAYABLE_EDGE_MARGIN = PLAYER_SPRITE_SIZE[0] * 0.5 + 12.0
 
 # Step 4: auto-fire bullets
 # FIRE_INTERVAL_MS = 200
@@ -50,6 +56,8 @@ ENEMY_COUNT = 200
 ENEMY_RADIUS = 20
 ENEMY_SPAWN_PADDING = 100.0
 ENEMY_SPAWN_EXTRA = 260.0
+# When the hero is this close to a playable edge, enemies won't enter from that side.
+ENEMY_SPAWN_BORDER_BUFFER = 280.0
 ENEMY_BODY_COLOR = (190, 55, 55)
 ENEMY_OUTLINE_COLOR = (45, 12, 12)
 ENEMY_FACE_COLOR = (28, 8, 8)
@@ -62,11 +70,12 @@ ENEMY_SPAWN_RAMP_POWER = 10.0  # higher = sharper ramp (try 2–4 normal, 6–12
 # Step 6: contact damage + HP
 PLAYER_RADIUS = 28
 PLAYER_HP_MAX = 100
-CONTACT_DAMAGE = 10
+# CONTACT_DAMAGE = 10
+CONTACT_DAMAGE = 0 # for testing
 CONTACT_DAMAGE_COOLDOWN_MS = 300
 SCREEN_SHAKE_DURATION_MS = 180
 SCREEN_SHAKE_AMPLITUDE = 10.0
-HP_BAR_W = 220
+HP_BAR_W = 300
 HP_BAR_H = 18
 HP_BAR_MARGIN = 16
 
